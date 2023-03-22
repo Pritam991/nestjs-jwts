@@ -1,7 +1,10 @@
 /* eslint-disable prettier/prettier */
+import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Strategy, ExtractJwt } from 'passport-jwt';
 
+
+@Injectable()
 export class AtStrategy extends PassportStrategy(Strategy, 'jwt') {
     constructor() {
 
@@ -9,5 +12,11 @@ export class AtStrategy extends PassportStrategy(Strategy, 'jwt') {
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             secretOrKey: 'at-secret',
         });
+    }
+
+    validate(payload: any) {
+        return payload;
+
+       
     }
 }
