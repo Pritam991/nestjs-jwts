@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
@@ -11,40 +11,7 @@ export class AuthService{
 
     constructor(private prisma: PrismaService, private jwtService: JwtService){}
 
-   hashData(data: string){
-    return bcrypt.hash(data, 10);
-   }
-
-   async getTokens(userId: number, email: string): Promise<Tokens>{
-    const [at, rt] = await Promise.all([
-        this.jwtService.signAsync(
-            {
-                sub: userId,
-                email,
-            },
-            {
-                secret: 'at-secret',
-                expiresIn: 60 * 15,
-            },
-        ),
-        this.jwtService.signAsync(
-            {
-                sub: userId,
-                email,
-            },
-            {
-                secret: 'rt-secret',
-                expiresIn: 60 * 60 * 24 * 7,
-            },
-        ),
-    ]);
-
-    return {
-        access_Token: at,
-        refresh_Token: rt,
-    };
-      
-   }
+   
    
 
     async signupLocal(dto: AuthDto): Promise<Tokens>{
@@ -57,15 +24,79 @@ export class AuthService{
         });
 
         const tokens = await this.getTokens(newUser.id, newUser.email);
-            return tokens;
-       
+           await this.updateRtHash(newUser.id, tokens.refresh_Token); 
+        return tokens;
+       }
 
+       async signinLocal(dto: AuthDto): Promise<Tokens>{
+        const user = await this.prisma.user.findUnique({
+            where: {
+                email: dto.email
+            }
+        })
+
+        if(!user) throw new ForbiddenException('Access Denied');
+
+        const passwordMatches = await bcrypt.compare(dto.password, user.hash);
+        if (!passwordMatches) throw new ForbiddenException('Access Denied');
+
+        const tokens = await this.getTokens(user.id, user.email);
+        await this.updateRtHash(user.id, tokens.refresh_Token); 
+        return tokens;
+       }
+       logout(){}
+       refreshTokens(){}
+
+         // helping function
+         async updateRtHash(userId: number, rt: string){
+            const hash = await this.hashData(rt);
+            await this.prisma.user.update({
+                where: {
+                    id: userId,
+                },
+                data: {
+                    hashedRt: hash,
+                },
+            });
+           }
+
+       hashData(data: string){
+        return bcrypt.hash(data, 10);
+       }
     
+       async getTokens(userId: number, email: string): Promise<Tokens>{
+        const [at, rt] = await Promise.all([
+            this.jwtService.signAsync(
+                {
+                    sub: userId,
+                    email,
+                },
+                {
+                    secret: 'at-secret',
+                    expiresIn: 60 * 15,
+                },
+            ),
+            this.jwtService.signAsync(
+                {
+                    sub: userId,
+                    email,
+                },
+                {
+                    secret: 'rt-secret',
+                    expiresIn: 60 * 60 * 24 * 7,
+                },
+            ),
+        ]);
+    
+        return {
+            access_Token: at,
+            refresh_Token: rt,
+        };
+          
+       }
 
-        }
-    signinLocal(){}
-    logout(){}
-    refreshTokens(){}
+     
+    
     }
     
 
